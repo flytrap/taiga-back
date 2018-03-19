@@ -44,7 +44,7 @@ class BaseAttachmentViewSet(HistoryResourceMixin, WatchedResourceMixin,
     model = models.Attachment
     serializer_class = serializers.AttachmentSerializer
     validator_class = validators.AttachmentValidator
-    filter_fields = ["project", "object_id"]
+    filter_fields = ["project", "object_id", "from_comment"]
 
     content_type = None
 
