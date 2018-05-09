@@ -389,6 +389,42 @@ class UsersViewSet(ModelCrudViewSet):
         return response.Ok(response_data)
 
     @detail_route(methods=["GET"])
+    def me(self, request, *args, **kwargs):
+        for_user = get_object_or_404(models.User, **kwargs)
+        from_user = request.user
+        self.check_permissions(request, 'watched', for_user)
+        filters = {
+            "type": request.GET.get("type", None),
+            "q": request.GET.get("q", None),
+            "status": request.GET.get("status", None),
+        }
+
+        self.object_list = services.get_me_list(for_user, from_user, **filters)
+        page = self.paginate_queryset(self.object_list)
+        elements = page.object_list if page is not None else self.object_list
+
+        extra_args_liked = {
+            "user_watching": services.get_watched_content_for_user(request.user),
+            "user_likes": services.get_liked_content_for_user(request.user),
+        }
+
+        extra_args_voted = {
+            "user_watching": services.get_watched_content_for_user(request.user),
+            "user_votes": services.get_voted_content_for_user(request.user),
+        }
+
+        response_data = []
+        for elem in elements:
+            if elem["type"] == "project":
+                # projects are liked objects
+                response_data.append(serializers.LikedObjectSerializer(into_namedtuple(elem), **extra_args_liked).data)
+            else:
+                # stories, tasks and issues are voted objects
+                response_data.append(serializers.VotedObjectSerializer(into_namedtuple(elem), **extra_args_voted).data)
+
+        return response.Ok(response_data)
+
+    @detail_route(methods=["GET"])
     def liked(self, request, *args, **kwargs):
         for_user = get_object_or_404(models.User, **kwargs)
         from_user = request.user
