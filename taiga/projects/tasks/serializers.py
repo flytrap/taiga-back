@@ -58,6 +58,8 @@ class TaskListSerializer(VoteResourceSerializerMixin, WatchedResourceSerializer,
     blocked_note = Field()
     is_closed = MethodField()
     user_story_extra_info = Field()
+    estimated_start = Field()
+    estimated_end = Field()
 
     def get_milestone_slug(self, obj):
         return obj.milestone.slug if obj.milestone else None
