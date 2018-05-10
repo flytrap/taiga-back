@@ -389,7 +389,7 @@ class UsersViewSet(ModelCrudViewSet):
         return response.Ok(response_data)
 
     @detail_route(methods=["GET"])
-    def me(self, request, *args, **kwargs):
+    def my_self(self, request, *args, **kwargs):
         for_user = get_object_or_404(models.User, **kwargs)
         from_user = request.user
         self.check_permissions(request, 'watched', for_user)
