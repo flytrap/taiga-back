@@ -284,6 +284,9 @@ from taiga.external_apps.api import Application, ApplicationToken
 router.register(r"applications", Application, base_name="applications")
 router.register(r"application-tokens", ApplicationToken, base_name="application-tokens")
 
+from task_calendar.views import CalenderViewSet
+router.register(r"calender", CalenderViewSet, base_name="calender")
+
 # Third party importers
 if settings.IMPORTERS.get('trello', {}).get('active', False):
     from taiga.importers.trello.api import TrelloImporterViewSet

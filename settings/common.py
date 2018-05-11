@@ -328,6 +328,7 @@ INSTALLED_APPS = [
     "sr",
     "easy_thumbnails",
     "raven.contrib.django.raven_compat",
+    "task_calendar"
 ]
 
 WSGI_APPLICATION = "taiga.wsgi.application"
