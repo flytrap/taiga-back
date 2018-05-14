@@ -61,13 +61,15 @@ class CalendarService(object):
     @classmethod
     def get_userstories(cls, user, start, end):
         userstories = UserStory.objects.filter(assigned_to=user).filter(
-            Q(estimated_start__lte=end) | Q(estimated_start__gte=start))
+            (Q(estimated_start__lte=end) & Q(estimated_start__gte=start)) | (
+                Q(estimated_end__lte=end) & Q(estimated_end__gte=start)))
         return userstories
 
     @classmethod
     def get_tasks(cls, user, start, end):
         tasks = Task.objects.filter(assigned_to=user).filter(
-            Q(estimated_start__lte=end) | Q(estimated_start__gte=start))
+            (Q(estimated_start__lte=end) & Q(estimated_start__gte=start)) | (
+                Q(estimated_end__lte=end) & Q(estimated_end__gte=start)))
         return tasks
 
 
@@ -110,24 +112,25 @@ class WeeklyObj(object):
         content = self.get_title()
         self.get_weekly()
         for us, tasks in self.weeklies.items():
-            content += self.get_content(us)
             for task in tasks:
-                content += '### task:\n\n'
-                content += self.get_content(task, '####')
+                content += self.get_content(task, parent=us)
+            else:
+                content += self.get_content(us)
         return content
 
     @staticmethod
-    def get_content(item, prefix='##'):
-        content = ''
-        content += '{} {}\n'.format(prefix, item.subject)
-        if item.status:
-            content += '{}## status: {}\n'.format(prefix, item.status.name)
+    def get_content(item, prefix='* ', parent=None):
+        content = prefix
         if item.estimated_start and item.estimated_end:
-            content += '{}## datetime: {}->{}\n'.format(prefix, item.estimated_start.strftime('%Y-%m-%d %H:%M'),
-                                                    item.estimated_end.strftime('%Y-%m-%d %H:%M'))
-
+            content += '({}->{})'.format(item.estimated_start.strftime('%m-%d %H:%M'),
+                                         item.estimated_end.strftime('%m-%d %H:%M'))
+        if parent:
+            content += '{}:'.format(parent.subject)
+        content += item.subject
         if item.description:
-            content += '{}# description: {}\n'.format(prefix, item.description)
+            content += ': {}'.format(item.description)
+        if item.status:
+            content += '-------->status: {}\n'.format(item.status.name)
         return content
 
 
