@@ -29,6 +29,8 @@ class CalenderViewSet(GenericViewSet):
             f.writelines(line)
         f.seek(0, 0)
         resp = HttpResponse(f, content_type='text/calendar; charset=UTF-8')
+        username = user.full_name if user.full_name else user.username
+        resp['Content-Disposition'] = 'attachment; filename="taiga-{}.ics"'.format(username)
         return resp
 
     def perform_content_negotiation(self, request, force=True):

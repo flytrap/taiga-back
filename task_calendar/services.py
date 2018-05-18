@@ -3,12 +3,15 @@
 #
 # Created by flytrap
 import datetime
+import time
 from ics import Event, Calendar
 from arrow import Arrow
-from dateutil import tz as dateutil_tz
 from django.db.models import Q
+from django.conf import settings
 from taiga.projects.userstories.models import UserStory
 from taiga.projects.tasks.models import Task
+
+front_base_url = getattr(settings, 'SITES', {}).get('front', {}).get('domain', '')
 
 
 class CalendarService(object):
@@ -35,16 +38,27 @@ class CalendarService(object):
     @classmethod
     def format_datetime(cls, item):
         """format datetime"""
-        return Arrow(item.year, item.month, item.day, item.hour, item.minute)
+        if not item:
+            return
+        new_time = item - datetime.timedelta(hours=8)
+        return Arrow(new_time.year, new_time.month, new_time.day, new_time.hour, new_time.minute)
 
     @classmethod
     def get_event(cls, item):
         e = Event()
-        e.name = item.subject
+        status_name = item.status.name if item.status else 'undefined'
+        ref_type, link = cls.get_type_link(item)
+        e.name = '[{}] [{}] {}'.format(status_name, ref_type.upper(), item.subject)
         e.begin = cls.format_datetime(item.estimated_start)
-        e.end = cls.format_datetime(item.estimated_start)
-        e.description = item.description
+        e.end = cls.format_datetime(item.estimated_end)
+        e.description = '{}\nlink: {}'.format(item.description, link)
         return e
+
+    @staticmethod
+    def get_type_link(item):
+        ref_type = 'task' if isinstance(item, Task) else 'us'
+        link = 'http://{}/project/{}/{}/{}'.format(front_base_url, item.project.slug, ref_type, item.ref)
+        return ref_type, link
 
     @classmethod
     def get_ics(cls, user, start=None, end=None):
@@ -58,8 +72,10 @@ class CalendarService(object):
         for task in tasks:
             if task.user_story not in weeklies:
                 weeklies[task.user_story] = []
-                e = cls.get_event(task)
+                e = cls.get_event(task.user_story)
                 c.events.append(e)
+            e = cls.get_event(task)
+            c.events.append(e)
             weeklies[task.user_story].append(task)
         for userstory in userstories:
             if userstory not in weeklies:
@@ -74,7 +90,7 @@ class CalendarService(object):
         if start and end:
             userstories = userstories.filter(
                 (Q(estimated_start__lte=end) & Q(estimated_start__gte=start)) | (
-                    Q(estimated_end__lte=end) & Q(estimated_end__gte=start)))
+                        Q(estimated_end__lte=end) & Q(estimated_end__gte=start)))
         elif start:
             userstories = userstories.filter(Q(estimated_start__gte=start) | Q(estimated_end__gte=start))
         elif end:
@@ -87,7 +103,7 @@ class CalendarService(object):
         if start and end:
             tasks = tasks.filter(
                 (Q(estimated_start__lte=end) & Q(estimated_start__gte=start)) | (
-                    Q(estimated_end__lte=end) & Q(estimated_end__gte=start)))
+                        Q(estimated_end__lte=end) & Q(estimated_end__gte=start)))
         elif start:
             tasks = tasks.filter(Q(estimated_start__gte=start) | Q(estimated_end__gte=start))
         elif end:
@@ -120,7 +136,7 @@ class WeeklyObj(object):
         self.start, self.end = CalendarService.check_time(start, end)
 
     def get_title(self):
-        return '# report ({} to {})\n'.format(self.start, self.end)
+        return '# 周报 \n * time: {} 至 {}\n * 第 {} 周\n'.format(self.start, self.end, time.strftime("%W"))
 
     def get_weekly(self):
         weeklies = {}
@@ -147,30 +163,35 @@ class WeeklyObj(object):
 
     def get_report(self):
         content = self.get_title()
-        content += '## current week task: \n'
+        content += '## 本周任务: \n'
         content += self.get_result()
-        detail = self.end - self.start + datetime.timedelta(1)
-        self.start += detail
-        self.end += detail
+
+        self.start = self.end + datetime.timedelta(1)
+        self.end = self.end + datetime.timedelta(7)
         plan = self.get_result()
         if plan:
-            content += '## next week plan: \n'
+            content += '## 下周计划: \n'
             content += plan
         return content
 
     @staticmethod
     def get_content(item, prefix='* ', parent=None):
-        content = prefix
-        if item.estimated_start and item.estimated_end:
-            content += '({}->{}) '.format(item.estimated_start.strftime('%m-%d %H:%M'),
-                                          item.estimated_end.strftime('%m-%d %H:%M'))
+        ref_type, link = CalendarService.get_type_link(item)
+        status_name = item.status.name if item.status else 'undefined'
+        content = '{} [{}] [{}] ['.format(prefix, status_name, ref_type.upper())
         if parent:
             content += '{}:'.format(parent.subject)
         content += item.subject
         if item.description:
             content += ': {}'.format(item.description)
-        if item.status:
-            content += '-------->status: {}\n'.format(item.status.name)
+        if hasattr(item, 'get_total_points'):
+            points = item.get_total_points()
+            if points is not None:
+                content += '({})'.format(item.get_total_points())
+        if item.estimated_start and item.estimated_end:
+            content += '[{}->{}] '.format(item.estimated_start.strftime('%m-%d:%H'),
+                                          item.estimated_end.strftime('%m-%d:%H'))
+        content += ']({})\n'.format(link)
         return content
 
 
