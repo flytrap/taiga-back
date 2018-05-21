@@ -15,12 +15,16 @@ User = get_user_model()
 
 
 class CalenderViewSet(GenericViewSet):
+    def get_user(self):
+        user_id = self.request.QUERY_PARAMS.get('user_id')
+        user = User.objects.filter(id=user_id).first()
+        return user
+
     @list_route(methods=["GET"])
     def ics(self, request):
         user = request.user
         if not request.user.is_authenticated:
-            user_id = self.request.QUERY_PARAMS.get('user_id')
-            user = User.objects.filter(id=user_id).first()
+            user = self.get_user()
             if not user:
                 return response.Unauthorized()
         c = CalendarService.get_ics(user, *self.parser_params())
@@ -41,7 +45,9 @@ class CalenderViewSet(GenericViewSet):
         if not request.user.is_authenticated:
             return response.Unauthorized()
         start, end = self.parser_params()
-        data = WeeklyObj(request.user, start, end).get_report()
+        user = self.get_user()
+        user = user if user else request.user
+        data = WeeklyObj(user, start, end).get_report()
         return response.Ok(data)
 
     def parser_params(self):

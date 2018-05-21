@@ -48,7 +48,7 @@ class CalendarService(object):
         e = Event()
         status_name = item.status.name if item.status else 'undefined'
         ref_type, link = cls.get_type_link(item)
-        e.name = '[{}] [{}] {}'.format(status_name, ref_type.upper(), item.subject)
+        e.name = '{} [{}]'.format(item.subject, status_name)
         e.begin = cls.format_datetime(item.estimated_start)
         e.end = cls.format_datetime(item.estimated_end)
         e.description = '{}\nlink: {}'.format(item.description, link)
@@ -136,7 +136,8 @@ class WeeklyObj(object):
         self.start, self.end = CalendarService.check_time(start, end)
 
     def get_title(self):
-        return '# 周报 \n * time: {} 至 {}\n * 第 {} 周\n'.format(self.start, self.end, time.strftime("%W"))
+        return '# 周报 \n * 负责人: {} \n * 时间: {} 至 {}\n * 第 {} 周\n'.format(
+            self.user.full_name, self.start, self.end, time.strftime("%W"))
 
     def get_weekly(self):
         weeklies = {}
@@ -178,20 +179,21 @@ class WeeklyObj(object):
     def get_content(item, prefix='* ', parent=None):
         ref_type, link = CalendarService.get_type_link(item)
         status_name = item.status.name if item.status else 'undefined'
-        content = '{} [{}] [{}] ['.format(prefix, status_name, ref_type.upper())
+        content = '{} [{}] ['.format(prefix, status_name)
         if parent:
             content += '{}:'.format(parent.subject)
         content += item.subject
+        content += ']({})'.format(link)
         if item.description:
             content += ': {}'.format(item.description)
         if hasattr(item, 'get_total_points'):
             points = item.get_total_points()
             if points is not None:
-                content += '({})'.format(item.get_total_points())
+                content += '({}个番茄)'.format(int(points))
         if item.estimated_start and item.estimated_end:
-            content += '[{}->{}] '.format(item.estimated_start.strftime('%m-%d:%H'),
-                                          item.estimated_end.strftime('%m-%d:%H'))
-        content += ']({})\n'.format(link)
+            content += '[{}到{}] '.format(item.estimated_start.strftime('%Y-%m-%d %H:%M'),
+                                         item.estimated_end.strftime('%Y-%m-%d %H:%M'))
+        content += '\n'
         return content
 
 
