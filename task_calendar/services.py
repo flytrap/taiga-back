@@ -5,11 +5,13 @@
 import datetime
 import time
 from ics import Event, Calendar
+from ics.parse import ContentLine
 from arrow import Arrow
 from django.db.models import Q
 from django.conf import settings
 from taiga.projects.userstories.models import UserStory
 from taiga.projects.tasks.models import Task
+from taiga.projects.models import Project
 
 front_base_url = getattr(settings, 'SITES', {}).get('front', {}).get('domain', '')
 
@@ -44,13 +46,20 @@ class CalendarService(object):
         return Arrow(new_time.year, new_time.month, new_time.day, new_time.hour, new_time.minute)
 
     @classmethod
-    def get_event(cls, item):
+    def get_event(cls, item, project_id=None):
         e = Event()
         status_name = item.status.name if item.status else 'undefined'
         ref_type, link = cls.get_type_link(item)
         e.name = '{} [{}]'.format(item.subject, status_name)
-        e.begin = cls.format_datetime(item.estimated_start)
-        e.end = cls.format_datetime(item.estimated_end)
+        start = cls.format_datetime(item.estimated_start)
+        end = cls.format_datetime(item.estimated_end)
+        if start and end:
+            start = min(start, end)
+            end = max(start, end)
+        e.begin = start
+        e.end = end
+        if item.assigned_to and project_id:
+            e.name = '[{}] '.format(item.assigned_to.full_name) + e.name
         e.description = '{}\nlink: {}'.format(item.description, link)
         return e
 
@@ -61,32 +70,48 @@ class CalendarService(object):
         return ref_type, link
 
     @classmethod
-    def get_ics(cls, user, start=None, end=None):
+    def get_ics(cls, user, start=None, end=None, project_id=None):
         if start is None:
             start = cls.get_ago_day()
-        userstories = cls.get_userstories(user, *cls.check_time(start, end))
-        tasks = cls.get_tasks(user, start, end)
+        start, end = cls.check_time(start, end)
+        userstories = cls.get_userstories(user, start, end, project_id)
+        tasks = cls.get_tasks(user, start, end, project_id)
 
-        c = Calendar(creator=user.username)
+        if project_id:
+            project = cls.get_project(project_id)
+            username = 'taiga-project_{}'.format(project.name)
+        else:
+            username = 'taiga-{}'.format(user.full_name if user.full_name else user.username)
+
+        c = Calendar(creator=username)
+        c._unused.append(ContentLine('X-WR-CALNAME', value=username))
+
         weeklies = {}
         for task in tasks:
             if task.user_story not in weeklies:
                 weeklies[task.user_story] = []
-                e = cls.get_event(task.user_story)
+                e = cls.get_event(task.user_story, project_id)
                 c.events.append(e)
-            e = cls.get_event(task)
+            e = cls.get_event(task, project_id)
             c.events.append(e)
             weeklies[task.user_story].append(task)
         for userstory in userstories:
             if userstory not in weeklies:
                 weeklies[userstory] = []
-                e = cls.get_event(userstory)
+                e = cls.get_event(userstory, project_id)
                 c.events.append(e)
         return c
 
     @classmethod
-    def get_userstories(cls, user, start, end):
-        userstories = UserStory.objects.filter(assigned_to=user)
+    def get_project(cls, project_id):
+        return Project.objects.filter(id=project_id).first()
+
+    @classmethod
+    def get_userstories(cls, user, start, end, project_id=None):
+        if project_id:
+            userstories = UserStory.objects.filter(project_id=project_id)
+        else:
+            userstories = UserStory.objects.filter(assigned_to=user)
         if start and end:
             userstories = userstories.filter(
                 (Q(estimated_start__lte=end) & Q(estimated_start__gte=start)) | (
@@ -95,11 +120,14 @@ class CalendarService(object):
             userstories = userstories.filter(Q(estimated_start__gte=start) | Q(estimated_end__gte=start))
         elif end:
             userstories = userstories.filter(Q(estimated_start__lte=end) | Q(estimated_end__lte=end))
-        return userstories
+        return userstories.order_by('estimated_start')
 
     @classmethod
-    def get_tasks(cls, user, start, end):
-        tasks = Task.objects.filter(assigned_to=user)
+    def get_tasks(cls, user, start, end, project_id=None):
+        if project_id:
+            tasks = Task.objects.filter(user_story__project_id=project_id)
+        else:
+            tasks = Task.objects.filter(assigned_to=user)
         if start and end:
             tasks = tasks.filter(
                 (Q(estimated_start__lte=end) & Q(estimated_start__gte=start)) | (
@@ -108,7 +136,7 @@ class CalendarService(object):
             tasks = tasks.filter(Q(estimated_start__gte=start) | Q(estimated_end__gte=start))
         elif end:
             tasks = tasks.filter(Q(estimated_start__lte=end) | Q(estimated_end__lte=end))
-        return tasks
+        return tasks.order_by('estimated_start')
 
     @staticmethod
     def check_time(start, end):
@@ -126,9 +154,10 @@ class CalendarService(object):
 
 
 class WeeklyObj(object):
-    def __init__(self, user, start=None, end=None):
+    def __init__(self, user, start=None, end=None, project_id=None):
         self.user = user
         self.delta = datetime.timedelta(7)
+        self.project_id = project_id
         if not start:
             start = CalendarService.get_monday()
         if not end:
@@ -141,8 +170,8 @@ class WeeklyObj(object):
 
     def get_weekly(self):
         weeklies = {}
-        tasks = CalendarService.get_tasks(self.user, self.start, self.end).order_by('estimated_start')
-        userstories = CalendarService.get_userstories(self.user, self.start, self.end).order_by('estimated_start')
+        tasks = CalendarService.get_tasks(self.user, self.start, self.end)
+        userstories = CalendarService.get_userstories(self.user, self.start, self.end)
         for task in tasks:
             if task.user_story not in weeklies:
                 weeklies[task.user_story] = []
@@ -189,7 +218,7 @@ class WeeklyObj(object):
         if hasattr(item, 'get_total_points'):
             points = item.get_total_points()
             if points is not None:
-                content += '({}个番茄)'.format(int(points))
+                content += '({}个番茄)  '.format(int(points))
         if item.estimated_start and item.estimated_end:
             content += '[{}到{}] '.format(item.estimated_start.strftime('%Y-%m-%d %H:%M'),
                                          item.estimated_end.strftime('%Y-%m-%d %H:%M'))

@@ -4,7 +4,7 @@
 # Created by flytrap
 from io import StringIO
 from django.contrib.auth import get_user_model
-from django.http.response import HttpResponse, StreamingHttpResponse
+from django.http.response import HttpResponse
 
 from taiga.base.api.viewsets import GenericViewSet
 from taiga.base.decorators import list_route
@@ -23,18 +23,19 @@ class CalenderViewSet(GenericViewSet):
     @list_route(methods=["GET"])
     def ics(self, request):
         user = request.user
+        start, end, project_id = self.parser_params()
         if not request.user.is_authenticated:
             user = self.get_user()
-            if not user:
+            if not user and not project_id:
                 return response.Unauthorized()
-        c = CalendarService.get_ics(user, *self.parser_params())
+        c = CalendarService.get_ics(user, start, end, project_id)
         f = StringIO()
         for line in c:
             f.writelines(line)
         f.seek(0, 0)
         resp = HttpResponse(f, content_type='text/calendar; charset=UTF-8')
-        username = user.full_name if user.full_name else user.username
-        resp['Content-Disposition'] = 'attachment; filename="taiga-{}.ics"'.format(username)
+
+        resp['Content-Disposition'] = 'attachment; filename="{}.ics"'.format(c.creator.encode('utf8'))
         return resp
 
     def perform_content_negotiation(self, request, force=True):
@@ -44,13 +45,13 @@ class CalenderViewSet(GenericViewSet):
     def weekly(self, request):
         if not request.user.is_authenticated:
             return response.Unauthorized()
-        start, end = self.parser_params()
         user = self.get_user()
         user = user if user else request.user
-        data = WeeklyObj(user, start, end).get_report()
+        data = WeeklyObj(user, *self.parser_params()).get_report()
         return response.Ok(data)
 
     def parser_params(self):
         start = self.request.QUERY_PARAMS.get('start')
         end = self.request.QUERY_PARAMS.get('end')
-        return start, end
+        project_id = self.request.QUERY_PARAMS.get('project_id')
+        return start, end, project_id
