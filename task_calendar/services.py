@@ -5,6 +5,7 @@
 import datetime
 import time
 import logging
+from collections import OrderedDict
 from ics import Event, Calendar
 from ics.parse import ContentLine
 from arrow import Arrow
@@ -173,7 +174,7 @@ class WeeklyObj(object):
             self.user.full_name, self.start, self.end, time.strftime("%W"))
 
     def get_weekly(self):
-        weeklies = {}
+        weeklies = OrderedDict()
         tasks = CalendarService.get_tasks(self.user, self.start, self.end)
         userstories = CalendarService.get_userstories(self.user, self.start, self.end)
         for task in tasks:
@@ -212,7 +213,7 @@ class WeeklyObj(object):
     def get_content(item, parent=None):
         ref_type, link = CalendarService.get_type_link(item)
         status_name = item.status.name if item.status else 'undefined'
-        content = '[{}] ['.format(status_name)
+        content = '[**{}**] ['.format(status_name)
         if parent:
             content += '{}:'.format(parent.subject)
         content += item.subject
@@ -226,7 +227,7 @@ class WeeklyObj(object):
                 item.estimated_start.strftime('%Y-%m-%d %H:%M'),
                 item.estimated_end.strftime('%Y-%m-%d %H:%M'))
         if item.description:
-            content += ':\n {}'.format(item.description)
+            content += ':\n {}\n'.format(item.description.strip())
         content += '\n'
         return content
 
