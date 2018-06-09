@@ -41,3 +41,5 @@ requests==2.17.3
 serpy==0.1.1
 six==1.10.0
 webcolors==1.7
+arrow==0.4.2
+ics==0.3.1

@@ -4,6 +4,7 @@
 # Created by flytrap
 import datetime
 import time
+import logging
 from ics import Event, Calendar
 from ics.parse import ContentLine
 from arrow import Arrow
@@ -12,6 +13,8 @@ from django.conf import settings
 from taiga.projects.userstories.models import UserStory
 from taiga.projects.tasks.models import Task
 from taiga.projects.models import Project
+
+logger = logging.getLogger(__name__)
 
 front_base_url = getattr(settings, 'SITES', {}).get('front', {}).get('domain', '')
 
@@ -84,7 +87,8 @@ class CalendarService(object):
             username = 'taiga-{}'.format(user.full_name if user.full_name else user.username)
 
         c = Calendar(creator=username)
-        c._unused.append(ContentLine('X-WR-CALNAME', value=username))
+        _unused = getattr(c, '_unused', [])
+        _unused.append(ContentLine('X-WR-CALNAME', value=username))
 
         weeklies = {}
         for task in tasks:
@@ -143,13 +147,13 @@ class CalendarService(object):
         if start:
             try:
                 start = datetime.datetime.strptime(start, "%Y-%m-%d").date()
-            except:
-                pass
+            except Exception as e:
+                logger.info(e)
         if end:
             try:
                 end = datetime.datetime.strptime(end, "%Y-%m-%d").date()
-            except:
-                pass
+            except Exception as e:
+                logger.info(e)
         return start, end
 
 
@@ -205,23 +209,24 @@ class WeeklyObj(object):
         return content
 
     @staticmethod
-    def get_content(item, prefix='* ', parent=None):
+    def get_content(item, parent=None):
         ref_type, link = CalendarService.get_type_link(item)
         status_name = item.status.name if item.status else 'undefined'
-        content = '{} [{}] ['.format(prefix, status_name)
+        content = '[{}] ['.format(status_name)
         if parent:
             content += '{}:'.format(parent.subject)
         content += item.subject
         content += ']({})'.format(link)
-        if item.description:
-            content += ': {}'.format(item.description)
         if hasattr(item, 'get_total_points'):
             points = item.get_total_points()
             if points is not None:
                 content += '({}个番茄)  '.format(int(points))
         if item.estimated_start and item.estimated_end:
-            content += '[{}到{}] '.format(item.estimated_start.strftime('%Y-%m-%d %H:%M'),
-                                         item.estimated_end.strftime('%Y-%m-%d %H:%M'))
+            content += '[{}到{}] '.format(
+                item.estimated_start.strftime('%Y-%m-%d %H:%M'),
+                item.estimated_end.strftime('%Y-%m-%d %H:%M'))
+        if item.description:
+            content += ':\n {}'.format(item.description)
         content += '\n'
         return content
 
