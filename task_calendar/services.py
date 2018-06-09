@@ -177,23 +177,23 @@ class WeeklyObj(object):
         weeklies = OrderedDict()
         tasks = CalendarService.get_tasks(self.user, self.start, self.end)
         userstories = CalendarService.get_userstories(self.user, self.start, self.end)
+        for userstory in userstories:
+            if userstory not in weeklies:
+                weeklies[userstory] = []
         for task in tasks:
             if task.user_story not in weeklies:
                 weeklies[task.user_story] = []
             weeklies[task.user_story].append(task)
-        for userstory in userstories:
-            if userstory not in weeklies:
-                weeklies[userstory] = []
         return weeklies
 
     def get_result(self):
         content = ''
         weeklies = self.get_weekly()
         for us, tasks in weeklies.items():
+            content += self.get_content(us)
             for task in tasks:
                 content += self.get_content(task, parent=us)
-            else:
-                content += self.get_content(us)
+            content += '\n'
         return content
 
     def get_report(self):
@@ -213,9 +213,10 @@ class WeeklyObj(object):
     def get_content(item, parent=None):
         ref_type, link = CalendarService.get_type_link(item)
         status_name = item.status.name if item.status else 'undefined'
-        content = '[**{}**] ['.format(status_name)
         if parent:
-            content += '{}:'.format(parent.subject)
+            content = '* [**{}**] ['.format(status_name)
+        else:
+            content = '[**{}**] ['.format(status_name)
         content += item.subject
         content += ']({})'.format(link)
         if hasattr(item, 'get_total_points'):
@@ -227,7 +228,7 @@ class WeeklyObj(object):
                 item.estimated_start.strftime('%Y-%m-%d %H:%M'),
                 item.estimated_end.strftime('%Y-%m-%d %H:%M'))
         if item.description:
-            content += ':\n {}\n'.format(item.description.strip())
+            content += '\n {}\n'.format(item.description.strip())
         content += '\n'
         return content
 
