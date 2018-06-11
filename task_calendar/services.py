@@ -65,6 +65,11 @@ class CalendarService(object):
         if item.assigned_to and project_id:
             e.name = '[{}] '.format(item.assigned_to.full_name) + e.name
         e.description = '{}\nlink: {}'.format(item.description, link)
+        if ref_type == 'us':
+            e.name = '[US] ' + e.name
+        else:
+            _, us_link = cls.get_type_link(item.user_story)
+            e.description = '[US]{}\nlink: {}\n{}'.format(item.user_story.subject, us_link, e.description)
         return e
 
     @staticmethod
